@@ -90,7 +90,34 @@ iResViewer <- function(wideResults = list(), longResults = list(),
                           4, shiny::checkboxInput(paste0(w, "_dopclab"), "Show labels",
                                                   value = FALSE))
                       ),
-                      shiny::uiOutput(paste0(w, "_dimred_ui")))
+                      shiny::uiOutput(paste0(w, "_dimred_ui"))
+                  )),
+
+                  ## ======================================================== ##
+                  ## My edit: tabs for 3D
+                  ## ======================================================== ##
+                  lapply(names(dimReds), function(w)
+                    shiny::tabPanel(
+                      "3D MDS",
+                      shiny::fluidRow(
+                        shiny::column(
+                          4, shiny::selectInput(paste0(w, "_pcx"), "x-axis",
+                                                choices = colnames(dimReds[[w]]),
+                                                selected = colnames(dimReds[[w]])[2])),
+                        shiny::column(
+                          4, shiny::selectInput(paste0(w, "_pcy"), "y-axis",
+                                                choices = colnames(dimReds[[w]]),
+                                                selected = colnames(dimReds[[w]])[3])),
+                        shiny::column(
+                          4, shiny::selectInput(paste0(w, "_pcz"), "z-axis",
+                                                choices = colnames(dimReds[[w]]),
+                                                selected = colnames(dimReds[[w]])[4])),
+                        shiny::column(
+                          4, shiny::selectInput(paste0(w, "_pccol"), "color by",
+                                                choices = colnames(dimReds[[w]]),
+                                                selected = colnames(dimReds[[w]])[ncol(dimReds[[w]])]))
+                      ),
+                      shiny::uiOutput("MDS3D.ui"))
                   ),
 
                   ## ======================================================== ##
@@ -143,6 +170,55 @@ iResViewer <- function(wideResults = list(), longResults = list(),
 
   server_function <- function(input, output, session) {
     options(ucscChromosomeNames = FALSE, envir = .GlobalEnv)
+    
+    
+    ## ====================================================================== ##
+    ## My edit: add a 3D plot
+    ## ====================================================================== ##
+    
+    
+    options(rgl.useNULL = TRUE)
+    save <- options(rgl.inShiny = TRUE)
+    on.exit(options(save))
+
+    vals <- shiny::reactiveValues()
+
+    Map(function(nm) {    
+      output$MDS3D <- shiny::renderPlot({
+        rgl::open3d(useNULL = TRUE)
+        cols <- scales::hue_pal()(length(unique(dimReds[[nm]][[colnames(dimReds[[nm]])[ncol(dimReds[[nm]])]]])))
+        rgl::plot3d(x = dimReds[[nm]][[input[[paste0(nm, "_pcx")]]]], 
+                    y = dimReds[[nm]][[input[[paste0(nm, "_pcy")]]]], 
+                    z = dimReds[[nm]][[input[[paste0(nm, "_pcz")]]]],
+                    col = cols[factor(dimReds[[nm]][[input[[paste0(nm, "_pccol")]]]])],
+                    xlab = input[[paste0(nm, "_pcx")]],
+                    ylab = input[[paste0(nm, "_pcy")]],
+                    zlab = input[[paste0(nm, "_pcz")]],
+                    type="p", size=8)
+  
+        vals$scene <- rgl::scene3d()
+        rgl::rgl.close()
+      })}, names(dimReds))
+    
+    #Map(function(nm) {  
+    output$wdg <- rgl::renderRglwidget({
+      rglwidget(vals$scene)
+    })
+      #}, names(dimReds))
+    
+    #Map(function(nm) {  
+    output$MDS3D.ui <- shiny::renderUI({
+      shiny::fluidPage(
+        shiny::fluidRow(
+          shiny::fluidRow(
+            rglwidgetOutput("wdg")
+          ),
+          shiny::plotOutput("MDS3D",  height = "800px")
+        )
+      )
+    })
+    #}, names(dimReds))
+    
 
     ## ====================================================================== ##
     ## Generate result tables
@@ -216,7 +292,7 @@ iResViewer <- function(wideResults = list(), longResults = list(),
     Map(function(nm) {
       output[[paste0(nm, "_abundance_ui")]] <- shiny::renderUI({
         shiny::plotOutput(paste0(nm, "_abundance"), hover = paste0(nm, "_abundance_hover"),
-                          width = "90%", height = "500px")
+                          width = "90%", height = "800px")
       })
     }, names(abundances))
 
@@ -241,8 +317,9 @@ iResViewer <- function(wideResults = list(), longResults = list(),
                                  legend.position = "bottom",
                                  axis.text.y = element_text(size = 14),
                                  axis.title.y = element_text(size = 16)) +
+              coord_cartesian(ylim = c(-3.2,16.1), expand = FALSE) + 
               guides(fill = guide_legend(nrow = 2, byrow = TRUE)) + xlab("") +
-              ylab("abundance")
+              ylab("logCPM")
           }
         }
       })
